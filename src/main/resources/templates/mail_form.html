@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>메일 전송 시스템</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container mt-5">
+<h2>대량 메일 전송 시스템</h2>
+
+<form id="mailForm" class="mt-4">
+    <div class="mb-3">
+        <label for="headers" class="form-label">데이터 컬럼 헤더 (콤마로 구분)</label>
+        <input type="text" class="form-control" id="headers" required
+               placeholder="name,email,company,position">
+    </div>
+
+    <div class="mb-3">
+        <label for="emailColumn" class="form-label">이메일 컬럼명</label>
+        <input type="text" class="form-control" id="emailColumn" required
+               placeholder="email">
+    </div>
+
+    <div class="mb-3">
+        <label for="csvData" class="form-label">수신자 데이터 (CSV 형식)</label>
+        <textarea class="form-control" id="csvData" rows="5" required
+                  placeholder="John Doe,john@example.com,ABC Corp,Manager"></textarea>
+    </div>
+
+    <div class="mb-3">
+        <label for="subject" class="form-label">메일 제목</label>
+        <input type="text" class="form-control" id="subject" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="template" class="form-label">메일 본문 (HTML 지원)</label>
+        <textarea class="form-control" id="template" rows="10" required
+                  placeholder="안녕하세요 {{name}}님,&#10;{{company}}의 {{position}}을 맡고 계신 귀하를..."></textarea>
+    </div>
+
+    <div class="mb-3">
+        <button type="button" class="btn btn-secondary" onclick="previewMail()">미리보기</button>
+        <button type="submit" class="btn btn-primary">메일 발송</button>
+    </div>
+</form>
+
+<div id="previewModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">메일 미리보기</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewContent"></div>
+        </div>
+    </div>
+</div>
+
+<div id="progressContainer" class="mt-4 d-none">
+    <h4>발송 진행률</h4>
+    <div class="progress">
+        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+    </div>
+    <div class="mt-2">
+        <span>성공: <span id="successCount">0</span></span>
+        <span class="ms-3">실패: <span id="failedCount">0</span></span>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script>
+    const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+
+    async function previewMail() {
+        const response = await fetch('/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                headers: document.getElementById('headers').value,
+                customData: document.getElementById('csvData').value,
+                template: document.getElementById('template').value
+            })
+        });
+
+        const preview = await response.text();
+        document.getElementById('previewContent').innerHTML = preview;
+        previewModal.show();
+    }
+
+    document.getElementById('mailForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.querySelector('.progress-bar');
+        const successCount = document.getElementById('successCount');
+        const failedCount = document.getElementById('failedCount');
+
+        progressContainer.classList.remove('d-none');
+        progressBar.style.width = '0%';
+        successCount.textContent = '0';
+        failedCount.textContent = '0';
+
+        // POST 요청으로 SSE 연결 시작
+        const response = await fetch('/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                headers: document.getElementById('headers').value,
+                emailColumn: document.getElementById('emailColumn').value,
+                csvData: document.getElementById('csvData').value,
+                subject: document.getElementById('subject').value,
+                template: document.getElementById('template').value
+            })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    const data = JSON.parse(line.slice(5));
+                    const progress = (data.current / data.total) * 100;
+
+                    progressBar.style.width = progress + '%';
+                    successCount.textContent = data.success;
+                    failedCount.textContent = data.failed;
+
+                    if (data.current === data.total) {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>
