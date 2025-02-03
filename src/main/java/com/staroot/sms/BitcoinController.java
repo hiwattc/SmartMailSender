@@ -27,5 +27,9 @@ public class BitcoinController {
     public String bitcoin() {
         return "bitcoin";
     }
+    @GetMapping("/btc2")
+    public String btc2() {
+        return "btc2";
+    }
 
 }

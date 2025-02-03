@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>비트코인 실시간 시세</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body style="background-color: #f3f4f6; padding: 1.5rem;">
+<div style="max-width: 56rem; margin: 0 auto; background-color: white; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border-radius: 0.5rem; padding: 1.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem; text-align: center;">비트코인 실시간 시세</h1>
+
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+        <div style="background-color: #dbeafe; padding: 1rem; border-radius: 0.5rem;">
+            <h2 style="font-weight: 600;">국제 가격 (USD)</h2>
+            <p id="globalPrice" style="font-size: 1.25rem; font-weight: bold; color: #2563eb;">Loading...</p>
+        </div>
+        <div style="background-color: #dcfce7; padding: 1rem; border-radius: 0.5rem;">
+            <h2 style="font-weight: 600;">한국 가격 (KRW)</h2>
+            <p id="koreanPrice" style="font-size: 1.25rem; font-weight: bold; color: #16a34a;">Loading...</p>
+        </div>
+    </div>
+
+    <div style="background-color: #fef9c3; padding: 1rem; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div>
+            <h2 style="font-weight: 600; margin-bottom: 0.5rem;">김치 프리미엄</h2>
+            <p id="kimchiPremium" style="font-size: 1.25rem; font-weight: bold;"></p>
+        </div>
+        <div style="text-align: right;">
+            <h2 style="font-weight: 600; margin-bottom: 0.5rem;">환율</h2>
+            <p id="exchangeRate" style="font-size: 1.25rem; font-weight: bold; color: #9333ea;"></p>
+        </div>
+    </div>
+
+    <div id="chart" style="width: 100%; height: 24rem;"></div>
+
+    <div style="text-align: center; margin-top: 1rem;">
+        <p id="lastUpdated" style="font-size: 0.875rem; color: #6b7280;">마지막 업데이트: -</p>
+    </div>
+</div>
+
+<script>
+    // 가격 데이터를 저장할 배열
+    const priceHistory = {
+        times: [],
+        globalPrices: [],
+        koreanPrices: []
+    };
+    const MAX_HISTORY_LENGTH = 20;
+
+    // ECharts 차트 초기화
+    const chartDom = document.getElementById('chart');
+    const myChart = echarts.init(chartDom);
+
+    // 차트 옵션 설정
+    const option = {
+        title: {
+            text: '비트코인 가격 추이'
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        legend: {
+            data: ['글로벌 가격 (USD)', '한국 가격 (KRW)']
+        },
+        xAxis: {
+            type: 'category',
+            data: priceHistory.times
+        },
+        yAxis: [
+            {
+                type: 'value',
+                name: '글로벌 가격 (USD)',
+                position: 'left',
+                axisLabel: {
+                    formatter: '{value} USD'
+                }
+            },
+            {
+                type: 'value',
+                name: '한국 가격 (KRW)',
+                position: 'right',
+                axisLabel: {
+                    formatter: '{value} KRW'
+                }
+            }
+        ],
+        series: [
+            {
+                name: '글로벌 가격 (USD)',
+                type: 'line',
+                data: priceHistory.globalPrices
+            },
+            {
+                name: '한국 가격 (KRW)',
+                type: 'line',
+                yAxisIndex: 1,
+                data: priceHistory.koreanPrices
+            }
+        ]
+    };
+
+    // 차트 초기 렌더링
+    myChart.setOption(option);
+
+    async function fetchBitcoinPrices() {
+        try {
+            // 글로벌 비트코인 가격 (Binance)
+            const globalResponse = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
+            const globalData = await globalResponse.json();
+            const globalPrice = parseFloat(globalData.price);
+            const formattedGlobalPrice = globalPrice.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+            document.getElementById('globalPrice').textContent = formattedGlobalPrice;
+
+            // 한국 거래소 비트코인 가격 (Upbit)
+            const koreanResponse = await fetch('https://api.upbit.com/v1/ticker?markets=KRW-BTC');
+            const koreanData = await koreanResponse.json();
+            const koreanPrice = parseFloat(koreanData[0].trade_price);
+            const formattedKoreanPrice = koreanPrice.toLocaleString('ko-KR', { style: 'currency', currency: 'KRW' });
+            document.getElementById('koreanPrice').textContent = formattedKoreanPrice;
+
+            // 환율 정보
+            const exchangeRate = await fetchExchangeRate();
+            const formattedExchangeRate = exchangeRate.toLocaleString('ko-KR', { style: 'currency', currency: 'KRW' }) + ' / USD';
+            document.getElementById('exchangeRate').textContent = formattedExchangeRate;
+
+            // 김치 프리미엄 계산
+            const globalPriceKRW = globalPrice * exchangeRate;
+            const kimchiPremium = ((koreanPrice / globalPriceKRW - 1) * 100).toFixed(2);
+
+            document.getElementById('kimchiPremium').textContent = `${kimchiPremium}%`;
+            document.getElementById('kimchiPremium').style.color = kimchiPremium > 0 ? 'green' : 'red';
+
+            // 가격 히스토리 업데이트
+            const currentTime = new Date();
+            const formattedTime = currentTime.toLocaleTimeString();
+
+            priceHistory.times.push(formattedTime);
+            priceHistory.globalPrices.push(globalPrice);
+            priceHistory.koreanPrices.push(koreanPrice);
+
+            // 최대 길이 제한
+            if (priceHistory.times.length > MAX_HISTORY_LENGTH) {
+                priceHistory.times.shift();
+                priceHistory.globalPrices.shift();
+                priceHistory.koreanPrices.shift();
+            }
+
+            // 차트 업데이트
+            myChart.setOption({
+                xAxis: {
+                    data: priceHistory.times
+                },
+                series: [
+                    {
+                        data: priceHistory.globalPrices
+                    },
+                    {
+                        data: priceHistory.koreanPrices
+                    }
+                ]
+            });
+
+            // 마지막 업데이트 시간
+            document.getElementById('lastUpdated').textContent = `마지막 업데이트: ${currentTime.toLocaleString()}`;
+
+        } catch (error) {
+            console.error('Error fetching prices:', error);
+            document.getElementById('priceInfo').innerHTML = '데이터를 불러오는 중 오류가 발생했습니다.';
+        }
+    }
+
+    async function fetchExchangeRate() {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const data = await response.json();
+        return data.rates.KRW;
+    }
+
+    // 처음 로딩 시 데이터 가져오기
+    fetchBitcoinPrices();
+
+    // 5초마다 데이터 새로고침
+    setInterval(fetchBitcoinPrices, 5 * 1000);
+</script>
+</body>
+</html>
