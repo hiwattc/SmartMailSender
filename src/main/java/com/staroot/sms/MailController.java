@@ -2,6 +2,8 @@ package com.staroot.sms;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -12,12 +14,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-@Slf4j
+//@Slf4j
 @Controller
 @RequiredArgsConstructor
 public class MailController {
     private final MailService mailService;
-
+    private static final Logger log = LoggerFactory.getLogger(MailController.class);
     @GetMapping("/")
     public String showMailForm() {
         return "mail_form";
